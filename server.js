@@ -11,7 +11,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Info endpoint: show README.md as HTML
 app.get('/', (req, res) => {
   try {
     const readmePath = path.resolve(__dirname, 'README.md');
@@ -42,14 +41,12 @@ const PORT = process.env.PORT || 3000;
 let privateKey, publicKey, kid;
 let guestPrivateKey, guestPublicKey, guestKid;
 
-// Generate kid from the public key
 const generateKid = (publicKey) => {
   const hash = crypto.createHash('sha256');
   hash.update(publicKey);
   return hash.digest('hex');
 };
 
-// Load keys from local files at startup
 try {
   privateKey = fs.readFileSync(path.resolve(process.env.PRIVATE_KEY_PATH), 'utf8');
   publicKey = fs.readFileSync(path.resolve(process.env.PUBLIC_KEY_PATH), 'utf8');
@@ -61,7 +58,6 @@ try {
   console.error('Error loading key files:', error);
 }
 
-// 1. Generate token based on email provided
 app.get('/generate-token', async (req, res) => {
   const { email } = req.query;
   if (!email) {
@@ -91,7 +87,6 @@ app.get('/generate-token', async (req, res) => {
   }
 });
 
-// 2. Generate basic JWT token without any sub claim
 app.get('/generate-guest-token', async (req, res) => {
   if (!guestPrivateKey || !guestKid) {
     return res.status(500).json({ error: 'Guest keys not loaded' });
@@ -113,7 +108,6 @@ app.get('/generate-guest-token', async (req, res) => {
   }
 });
 
-// Metadata endpoint (OIDC style)
 app.get('/.well-known/openid-configuration', (req, res) => {
   const issuer = `http://${req.get('host')}`;
   const config = {
@@ -132,16 +126,12 @@ app.get('/.well-known/openid-configuration', (req, res) => {
   res.json(config);
 });
 
-// JWKS endpoint (serves main public key)
 app.get('/.well-known/jwks.json', (req, res) => {
-  // Parse the PEM public key to get modulus and exponent
   const jwk = pemToJwk(publicKey, kid);
   res.json({ keys: [jwk] });
 });
 
-// Dummy userinfo endpoint
 app.get('/userinfo', (req, res) => {
-  // In real IdP, you'd extract user from token
   res.json({
     sub: 'user@example.com',
     email: 'user@example.com',
@@ -149,17 +139,12 @@ app.get('/userinfo', (req, res) => {
   });
 });
 
-// Helper: Convert PEM public key to JWK (minimal, RSA only)
 function pemToJwk(pem, kid) {
-  // Remove header/footer and newlines
   const b64 = pem
     .replace('-----BEGIN PUBLIC KEY-----', '')
     .replace('-----END PUBLIC KEY-----', '')
     .replace(/\n/g, '');
   const der = Buffer.from(b64, 'base64');
-  // Parse modulus and exponent (simple, not robust for all key types)
-  // This is a minimal approach for 2048-bit RSA keys
-  // For production, use a library like 'pem-jwk' or 'node-jose'
   const modulusStart = der.indexOf(Buffer.from([0x02, 0x82])) + 4;
   const modulusLen = der.readUInt16BE(modulusStart - 2);
   const modulus = der.slice(modulusStart, modulusStart + modulusLen);
@@ -177,7 +162,6 @@ function pemToJwk(pem, kid) {
 }
 
 
-// Public/private key endpoints
 app.get('/public-key', (req, res) => {
   res.type('text/plain').send(publicKey);
 });
@@ -190,7 +174,7 @@ app.get('/guest-public-key', (req, res) => {
 app.get('/guest-private-key', (req, res) => {
   res.type('text/plain').send(guestPrivateKey);
 });
-// Serve guest X.509 certificate
+
 app.get('/guest-certificate', (req, res) => {
   const certPath = path.resolve(__dirname, 'guest_public.crt');
   try {
