@@ -97,8 +97,8 @@ app.get('/generate-guest-token', async (req, res) => {
     return res.status(500).json({ error: 'Guest keys not loaded' });
   }
   const payload = {
-    aud:"c15364322e0140c69dd1bf4f74ab61c4",
-    iss:"c15364322e0140c69dd1bf4f74ab61c4"
+    aud:"embeddables-guest-token",
+    iss:"embeddables-guest-token"
   };
   const jwtOptions = {
     algorithm: 'RS256',
