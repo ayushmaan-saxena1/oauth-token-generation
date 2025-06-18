@@ -22,7 +22,14 @@
    - **Name:** `JWT Idp`
    - **Client ID:** `embeddables_token`
    - **Client Secret:** `12345678`
-   - **Well Known Configuration URL:** `http://localhost:3000/.well-known/openid-configuration`
+   - **Well Known Configuration URL:** `https://token-generation.onrender.com/.well-known/openid-configuration`
+
+---
+
+## Endpoints
+
+- `/generate-token?email=<email>` - Generate JWT token based on email
+- `/generate-guest-token` - Generate guest JWT token
 
 ---
 
