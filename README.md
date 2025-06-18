@@ -37,7 +37,7 @@
 
 You can use this IdP to authenticate users on static sites by requesting a JWT for a user-provided email. Here’s a sample function and usage:
 
-```html
+````html
 <script>
 // Call this function with the user's email to get a JWT
 async function getJwtToken(email) {
@@ -64,7 +64,7 @@ document.getElementById('loginBtn').onclick = async function() {
   <button id="loginBtn">Login</button>
 </div>
 <div id="loginStatus" style="margin-top:1em;font-weight:bold;"></div>
-```
+````
 
 - The user enters their email and clicks "Login".
 - After successful login, the input and button are hidden and a message is shown.
