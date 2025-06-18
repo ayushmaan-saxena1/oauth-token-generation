@@ -70,7 +70,7 @@ app.get('/generate-token', async (req, res) => {
     sub: email,
     email: email,
     aud: 'embeddables_token',
-    iss: 'http://localhost:3000',
+    iss: req.protocol + '://' + req.get('host'),
     scope: 'read:messages write:messages',
     iat: Math.floor(Date.now() / 1000)
   };
@@ -109,7 +109,7 @@ app.get('/generate-guest-token', async (req, res) => {
 });
 
 app.get('/.well-known/openid-configuration', (req, res) => {
-  const issuer = `http://${req.get('host')}`;
+  const issuer = req.protocol + '://' + req.get('host');
   const config = {
     issuer,
     jwks_uri: `${issuer}/.well-known/jwks.json`,
