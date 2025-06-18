@@ -189,6 +189,16 @@ app.get('/guest-public-key', (req, res) => {
 app.get('/guest-private-key', (req, res) => {
   res.type('text/plain').send(guestPrivateKey);
 });
+// Serve guest X.509 certificate
+app.get('/guest-certificate', (req, res) => {
+  const certPath = path.resolve(__dirname, 'guest_public.crt');
+  try {
+    const cert = fs.readFileSync(certPath, 'utf8');
+    res.type('application/x-pem-file').send(cert);
+  } catch (err) {
+    res.status(404).send('Guest certificate not found.');
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
