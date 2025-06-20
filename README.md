@@ -30,6 +30,7 @@
 
 - `/generate-token?email=<email>` - Generate JWT token based on email
 - `/generate-guest-token` - Generate guest JWT token
+- `/userinfo` - Shows the currently logged-in user's info (HTML) with an option to logout in case of logged in user
 
 ---
 

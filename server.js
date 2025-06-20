@@ -1,5 +1,10 @@
 require('dotenv').config();
 const express = require('express');
+
+// Relying on https://render.com/docs/environment-variables#default-environment-variables for switching between local and render env
+const IS_RENDER = process.env.RENDER === 'true';
+console.log('IS_RENDER:', IS_RENDER);
+
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
@@ -10,6 +15,16 @@ const marked = require('marked');
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.use(express.urlencoded({ extended: true }));
+
+// Session middleware setup
+const session = require('express-session');
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'change_this_secret',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: IS_RENDER },
+}));
 
 app.get('/', (req, res) => {
   try {
@@ -69,8 +84,8 @@ app.get('/generate-token', async (req, res) => {
   const payload = {
     sub: email,
     email: email,
-    aud: 'embeddables_token',
-    iss: 'https://' + req.get('host'),
+    aud: IS_RENDER ? 'embeddables_token' : 'embeddables_token_local',
+    iss: IS_RENDER ? `https://${req.get('host')}` : 'http://localhost:3000',
     scope: 'read:messages write:messages',
     iat: Math.floor(Date.now() / 1000)
   };
@@ -109,12 +124,12 @@ app.get('/generate-guest-token', async (req, res) => {
 });
 
 app.get('/.well-known/openid-configuration', (req, res) => {
-  const issuer =  'https://' + req.get('host');
+  const issuer = IS_RENDER ? `https://${req.get('host')}` : 'http://localhost:3000';
   const config = {
     issuer,
     jwks_uri: `${issuer}/.well-known/jwks.json`,
     authorization_endpoint: `${issuer}/authorize`,
-    token_endpoint: `${issuer}/generate-token`,
+    token_endpoint: `${issuer}/token`,
     userinfo_endpoint: `${issuer}/userinfo`,
     response_types_supported: ['code', 'token'],
     subject_types_supported: ['public'],
@@ -131,11 +146,88 @@ app.get('/.well-known/jwks.json', (req, res) => {
   res.json({ keys: [jwk] });
 });
 
+const codeStore = {};
+
+app.get('/authorize', (req, res) => {
+  const { client_id, redirect_uri, state, scope, response_type } = req.query;
+  if (req.session && req.session.email) {
+    const code = Math.random().toString(36).substr(2, 16);
+    codeStore[code] = {
+      email: req.session.email,
+      client_id,
+      redirect_uri,
+      scope,
+      created: Date.now(),
+    };
+    const redirectUrl = `${redirect_uri}?code=${code}${state ? `&state=${encodeURIComponent(state)}` : ''}`;
+    return res.redirect(redirectUrl);
+  }
+  res.send(`
+    <html>
+      <head>
+        <title>Login - OIDC Authorization</title>
+        <style>
+          body { font-family: Arial, sans-serif; background: #f6f6f6; margin: 0; padding: 0; }
+          .container { max-width: 400px; margin: 80px auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+          input[type=email], button { width: 100%; padding: 10px; margin-top: 8px; border-radius: 4px; border: 1px solid #ccc; }
+          button { background: #0366d6; color: #fff; border: none; margin-top: 16px; cursor: pointer; }
+          h2 { margin-bottom: 16px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2>Sign in to continue</h2>
+          <form method="POST" action="/authorize">
+            <input type="hidden" name="client_id" value="${client_id || ''}" />
+            <input type="hidden" name="redirect_uri" value="${redirect_uri || ''}" />
+            <input type="hidden" name="state" value="${state || ''}" />
+            <input type="hidden" name="scope" value="${scope || ''}" />
+            <input type="hidden" name="response_type" value="${response_type || ''}" />
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" required autofocus />
+            <button type="submit">Continue</button>
+          </form>
+        </div>
+      </body>
+    </html>
+  `);
+});
+
+app.post('/authorize', (req, res) => {
+  const { email, client_id, redirect_uri, state, scope, response_type } = req.body;
+  if (!email || !redirect_uri) {
+    return res.status(400).send('Missing email or redirect_uri');
+  }
+  req.session.email = email;
+  const code = Math.random().toString(36).substr(2, 16);
+  codeStore[code] = {
+    email,
+    client_id,
+    redirect_uri,
+    scope,
+    created: Date.now(),
+  };
+  const redirectUrl = `${redirect_uri}?code=${code}${state ? `&state=${encodeURIComponent(state)}` : ''}`;
+  res.redirect(redirectUrl);
+});
+
 app.get('/userinfo', (req, res) => {
-  res.json({
-    sub: 'user@example.com',
-    email: 'user@example.com',
-    name: 'Test User'
+  if (!req.session || !req.session.email) {
+    return res.send('<h2>No user is logged in.</h2>');
+  }
+  const email = req.session.email;
+  res.send(`
+    <h2>User Info</h2>
+    <p><strong>Email:</strong> ${email}</p>
+    <form method="POST" action="/logout" style="margin-top:20px;">
+      <button type="submit">Logout</button>
+    </form>
+  `);
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/userinfo');
   });
 });
 
@@ -183,6 +275,51 @@ app.get('/guest-certificate', (req, res) => {
   } catch (err) {
     res.status(404).send('Guest certificate not found.');
   }
+});
+
+app.post('/token', (req, res) => {
+  const { grant_type, code, redirect_uri, client_id } = req.body;
+  if (grant_type !== 'authorization_code') {
+    return res.status(400).json({ error: 'unsupported_grant_type' });
+  }
+  if (!code || !redirect_uri || !client_id) {
+    return res.status(400).json({ error: 'invalid_request', error_description: 'Missing parameters' });
+  }
+  const codeData = codeStore[code];
+  if (!codeData) {
+    return res.status(400).json({ error: 'invalid_grant', error_description: 'Invalid or expired code' });
+  }
+  if (codeData.redirect_uri !== redirect_uri || codeData.client_id !== client_id) {
+    return res.status(400).json({ error: 'invalid_grant', error_description: 'redirect_uri or client_id mismatch' });
+  }
+  delete codeStore[code];
+  const issuer = IS_RENDER ? `https://${req.get('host')}` : 'http://localhost:3000';
+  const payload = {
+    sub: codeData.email,
+    email: codeData.email,
+    aud: client_id,
+    iss: issuer,
+    scope: codeData.scope,
+    iat: Math.floor(Date.now() / 1000),
+  };
+  const jwtOptions = {
+    algorithm: 'RS256',
+    expiresIn: '1h',
+    keyid: kid,
+  };
+  let id_token;
+  try {
+    id_token = jwt.sign(payload, privateKey, jwtOptions);
+  } catch (e) {
+    console.error('JWT signing error:', e);
+    return res.status(500).json({ error: 'server_error', error_description: 'Failed to sign token' });
+  }
+  res.json({
+    access_token: id_token,
+    id_token,
+    token_type: 'Bearer',
+    expires_in: 3600,
+  });
 });
 
 app.listen(PORT, () => {
