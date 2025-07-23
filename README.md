@@ -30,7 +30,9 @@
 
 - `/generate-token?email=<email>` - Generate JWT token based on email
 - `/generate-guest-token` - Generate guest JWT token
+- `/generate-verified-guest-token?token=<captcha_token>` - Generate a guest JWT token only after successful Cloudflare Turnstile CAPTCHA verification. Requires a valid CAPTCHA token in the query string.
 - `/userinfo` - Shows the currently logged-in user's info (HTML) with an option to logout in case of logged in user
+
 
 ---
 

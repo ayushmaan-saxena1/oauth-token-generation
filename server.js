@@ -11,7 +11,7 @@ const path = require('path');
 const crypto = require('crypto');
 const cors = require('cors');
 const marked = require('marked');
-
+const fetch = require('node-fetch');
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -122,6 +122,65 @@ app.get('/generate-guest-token', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate guest token' });
   }
 });
+
+app.get('/generate-verified-guest-token', async (req, res) => {
+  const token = req.query.token;
+  const ip = req.headers['cf-connecting-ip'] || req.ip;
+
+  if (!token) {
+    return res.status(400).json({ error: 'Missing CAPTCHA token' });
+  }
+
+  if (!guestPrivateKey || !guestKid) {
+    return res.status(500).json({ error: 'Guest keys not loaded' });
+  }
+
+  const captchaSuccess = await validateCaptcha(token, ip);
+  if (!captchaSuccess) {
+    return res.status(403).json({ error: 'CAPTCHA verification failed' });
+  }
+
+  const payload = {
+    aud: 'embeddables-guest-token',
+    iss: 'embeddables-guest-token',
+    captchaVerified: captchaSuccess
+  };
+
+  const jwtOptions = {
+    algorithm: 'RS256',
+    expiresIn: '1h',
+    keyid: guestKid
+  };
+
+  try {
+    const signedToken = jwt.sign(payload, guestPrivateKey, jwtOptions);
+    res.json({ token: signedToken });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate guest token' });
+  }
+});
+// cloudflare turnstile secret key
+// This is the demo secret key. In production, we recommend
+// you store your secret key(s) safely.
+const SECRET_KEY = "0x4AAAAAABlmGnsA_ZQZ83YH6Vg-vHCH43s";
+async function validateCaptcha(token, ip) {
+  const url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      secret: SECRET_KEY,
+      response: token,
+      remoteip: ip
+    })
+  });
+
+  const result = await response.json();
+  return result.success;
+}
+
+
 
 app.get('/.well-known/openid-configuration', (req, res) => {
   const issuer = IS_RENDER ? `https://${req.get('host')}` : 'http://localhost:3000';
