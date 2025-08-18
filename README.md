@@ -1,5 +1,7 @@
 # JWT Token Generation Node Server
 
+This is just for PoC references and not for actual production use. Please use this carefully.
+
 ---
 
 ## Features
@@ -41,25 +43,44 @@
 You can use this IdP to authenticate users on static sites by requesting a JWT for a user-provided email. Here’s a sample function and usage:
 
 ````html
-<script>
+<script type="module">
+import { init , login , logout } from 'https://<sn_instance_url>/uxasset/externals/sn_embeddable_core/index.jsdbx';
+
+await init({
+	theme: '31bf91ae07203010e03948f78ad30095',  /* sys_id of the theme to use for the embeddable components in your website*/
+	baseURL: '<sn_instance_url>', /* Base URL of the instance to be used for the embeddable components in your website*/
+	authCallback: getTokenCallBack, /* Function which returns the auth token for the current user, required for auth setup*/
+});
+function getTokenCallBack() {
+	var idToken; /* Get the id token for the current user */
+	return Promise.resolve(idToken);
+}
+/* Uncomment below functions to handle login and logout once the user logs into your website */
+// await login();
+// await logout();
+
 // Call this function with the user's email to get a JWT
 async function getJwtToken(email) {
   const response = await fetch(`https://token-generation.onrender.com/generate-token?email=${encodeURIComponent(email)}`);
   const data = await response.json();
   return data.token; // JWT string
 }
+var generatedIDToken = '';
 
 // Example usage:
 document.getElementById('loginBtn').onclick = async function() {
   const email = document.getElementById('emailInput').value;
-  const token = await getJwtToken(email);
+  generatedIDToken = await getJwtToken(email);
+  await login(); // call the SN authentication function after getting the JWT token
   // Store the token, use it in Authorization headers, etc.
-  console.log('JWT:', token);
+  console.log('JWT:', generatedIDToken);
   // Hide input/button and show success message
   document.getElementById('loginForm').style.display = 'none';
   document.getElementById('loginStatus').innerText = email + ' logged in successfully.';
 };
 </script>
+
+
 
 <!-- Example HTML -->
 <div id="loginForm">
@@ -72,3 +93,5 @@ document.getElementById('loginBtn').onclick = async function() {
 - The user enters their email and clicks "Login".
 - After successful login, the input and button are hidden and a message is shown.
 - The function fetches a JWT from the IdP and returns it to the website for authentication or API calls.
+- The JWT is then used to authenticate the user in the ServiceNow instance.
+
