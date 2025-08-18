@@ -52,7 +52,7 @@ await init({
 	authCallback: getTokenCallBack, /* Function which returns the auth token for the current user, required for auth setup*/
 });
 function getTokenCallBack() {
-	var idToken; /* Get the id token for the current user */
+	var idToken = generatedIDToken;
 	return Promise.resolve(idToken);
 }
 /* Uncomment below functions to handle login and logout once the user logs into your website */
