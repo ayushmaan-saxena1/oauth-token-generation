@@ -163,7 +163,7 @@ app.get('/generate-verified-guest-token', async (req, res) => {
 const SECRET_KEY = "0x4AAAAAABlmGnsA_ZQZ83YH6Vg-vHCH43s";
 
 // Google reCAPTCHA secret key
-const GOOGLE_RECAPTCHA_SECRET_KEY = "6LdD1kIsAAAAAKpy0yjrMoc0JgFk4Er-3Zjyv3Y3";
+const GOOGLE_RECAPTCHA_SECRET_KEY = "6LdD1kIsAAAAAKx412tV3_mKXDqAaqm6FoXODr94";
 async function validateCaptcha(token, ip) {
   const url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
@@ -181,29 +181,33 @@ async function validateCaptcha(token, ip) {
   return result.success;
 }
 
-async function validateGoogleCaptcha(token, ip) {
-  const url = 'https://www.google.com/recaptcha/api/siteverify';
+async function validateGoogleCaptcha(token, action) {
+  const response = await fetch(
+    `https://www.google.com/recaptcha/api/siteverify?secret=${GOOGLE_RECAPTCHA_SECRET_KEY}&response=${token}`,
+    { method: 'POST' }
+  );
 
-  const params = new URLSearchParams();
-  params.append('secret', GOOGLE_RECAPTCHA_SECRET_KEY);
-  params.append('response', token);
-  if (ip) {
-    params.append('remoteip', ip);
-  }
+  const data = await response.json();
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString()
+  console.log(`📊 reCAPTCHA Response:`, {
+    success: data.success,
+    score: data.score,
+    action: data.action,
+    hostname: data.hostname
   });
 
-  const result = await response.json();
-  return result.success;
+  if (data.success && (!action || data.action === action)) {
+    console.log(`✅ Verification passed! Score: ${data.score}`);
+    return { success: true, score: data.score, action: data.action, timestamp: data.challenge_ts };
+  } else {
+    console.log(`❌ Verification failed! Score: ${data.score || 0}`);
+    return { success: false, score: data.score || 0, 'error-codes': data['error-codes'] };
+  }
 }
 
 app.get('/generate-verified-guest-token-google', async (req, res) => {
   const token = req.query.token;
-  const ip = req.headers['x-forwarded-for'] || req.ip;
+  const action = req.query.action;
 
   if (!token) {
     return res.status(400).json({ error: 'Missing CAPTCHA token' });
@@ -213,15 +217,15 @@ app.get('/generate-verified-guest-token-google', async (req, res) => {
     return res.status(500).json({ error: 'Guest keys not loaded' });
   }
 
-  const captchaSuccess = await validateGoogleCaptcha(token, ip);
-  if (!captchaSuccess) {
-    return res.status(403).json({ error: 'CAPTCHA verification failed' });
+  const captchaResult = await validateGoogleCaptcha(token, action);
+  if (!captchaResult.success) {
+    return res.status(403).json({ error: 'CAPTCHA verification failed', 'error-codes': captchaResult['error-codes'] });
   }
 
   const payload = {
     aud: 'embeddables-guest-token',
     iss: 'embeddables-guest-token',
-    captchaVerified: captchaSuccess
+    captchaVerified: captchaResult.success
   };
 
   const jwtOptions = {
