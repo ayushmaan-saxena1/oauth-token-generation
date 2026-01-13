@@ -107,8 +107,8 @@ app.get('/generate-guest-token', async (req, res) => {
     return res.status(500).json({ error: 'Guest keys not loaded' });
   }
   const payload = {
-    aud:"embeddables-guest-token",
-    iss:"embeddables-guest-token"
+    aud: "embeddables-guest-token",
+    iss: "embeddables-guest-token"
   };
   const jwtOptions = {
     algorithm: 'RS256',
@@ -160,9 +160,10 @@ app.get('/generate-verified-guest-token', async (req, res) => {
   }
 });
 // cloudflare turnstile secret key
-// This is the demo secret key. In production, we recommend
-// you store your secret key(s) safely.
 const SECRET_KEY = "0x4AAAAAABlmGnsA_ZQZ83YH6Vg-vHCH43s";
+
+// Google reCAPTCHA secret key
+const GOOGLE_RECAPTCHA_SECRET_KEY = "6LdD1kIsAAAAAKpy0yjrMoc0JgFk4Er-3Zjyv3Y3";
 async function validateCaptcha(token, ip) {
   const url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
@@ -179,6 +180,63 @@ async function validateCaptcha(token, ip) {
   const result = await response.json();
   return result.success;
 }
+
+async function validateGoogleCaptcha(token, ip) {
+  const url = 'https://www.google.com/recaptcha/api/siteverify';
+
+  const params = new URLSearchParams();
+  params.append('secret', GOOGLE_RECAPTCHA_SECRET_KEY);
+  params.append('response', token);
+  if (ip) {
+    params.append('remoteip', ip);
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  });
+
+  const result = await response.json();
+  return result.success;
+}
+
+app.get('/generate-verified-guest-token-google', async (req, res) => {
+  const token = req.query.token;
+  const ip = req.headers['x-forwarded-for'] || req.ip;
+
+  if (!token) {
+    return res.status(400).json({ error: 'Missing CAPTCHA token' });
+  }
+
+  if (!guestPrivateKey || !guestKid) {
+    return res.status(500).json({ error: 'Guest keys not loaded' });
+  }
+
+  const captchaSuccess = await validateGoogleCaptcha(token, ip);
+  if (!captchaSuccess) {
+    return res.status(403).json({ error: 'CAPTCHA verification failed' });
+  }
+
+  const payload = {
+    aud: 'embeddables-guest-token',
+    iss: 'embeddables-guest-token',
+    captchaVerified: captchaSuccess
+  };
+
+  const jwtOptions = {
+    algorithm: 'RS256',
+    expiresIn: '1h',
+    keyid: guestKid
+  };
+
+  try {
+    const signedToken = jwt.sign(payload, guestPrivateKey, jwtOptions);
+    res.json({ token: signedToken });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate guest token' });
+  }
+});
 
 
 

@@ -33,6 +33,7 @@ This is just for PoC references and not for actual production use. Please use th
 - `/generate-token?email=<email>` - Generate JWT token based on email
 - `/generate-guest-token` - Generate guest JWT token
 - `/generate-verified-guest-token?token=<captcha_token>` - Generate a guest JWT token only after successful Cloudflare Turnstile CAPTCHA verification. Requires a valid CAPTCHA token in the query string.
+- `/generate-verified-guest-token-google?token=<captcha_token>` - Generate a guest JWT token only after successful Google reCAPTCHA verification. Requires a valid reCAPTCHA token in the query string.
 - `/userinfo` - Shows the currently logged-in user's info (HTML) with an option to logout in case of logged in user
 
 
